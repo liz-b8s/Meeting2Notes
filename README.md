@@ -1,6 +1,14 @@
-# Audio to Meeting Notes
+# Meeting to Notes
 
-Record meeting audio (or use an existing audio file), transcribe it with OpenAI, and generate structured meeting notes as **Markdown or plain text**.
+Record meeting audio, transcribe it with OpenAI, and generate structured meeting notes as **Markdown or plain text**.
+
+Once set up, you can run everything with a single command:
+
+```bash
+meetingnotes
+```
+
+---
 
 ## Requirements
 - macOS
@@ -9,7 +17,11 @@ Record meeting audio (or use an existing audio file), transcribe it with OpenAI,
 - OpenAI API key
 - ffmpeg (needed for recording)
 
+---
+
 ## Setup
+
+### 1. Create and activate the Conda environment
 
 ```bash
 conda create -n audio2notes python=3.10 -y
@@ -18,50 +30,112 @@ pip install requests
 brew install ffmpeg
 ```
 
-Set your API key in terminal:
+---
+
+### 2. Set your OpenAI API key
+
+In your terminal (replace `sk-...` with your actual key):
+
 ```bash
 export OPENAI_API_KEY="sk-..."
 ```
 
-## Microphone Permission (macOS)
-System Settings → Privacy & Security → Microphone  
-Enable access for Terminal / iTerm / PyCharm / VS Code.
-
-## List audio devices
-Find the index for your microphone (for most laptops this is `0`):
+To make this permanent:
 
 ```bash
-python3 meeting2notes.py --list-devices
+echo 'export OPENAI_API_KEY="sk-..."' >> ~/.zshrc
+source ~/.zshrc
 ```
 
-## Record audio and generate notes
+---
+
+### 3. Allow microphone access (macOS)
+
+System Settings → **Privacy & Security → Microphone**  
+Enable access for **Terminal / iTerm / VS Code / PyCharm**.
+
+---
+
+## One-command setup (recommended)
+
+This sets up a global command called `meetingnotes`.
+
+### 1. Create a launcher directory
+
 ```bash
-python3 meeting2notes.py --record --device ":0"
+mkdir -p ~/bin
 ```
 
-Press **Enter** to stop recording.  
-Progress messages will appear while the audio is transcribed and notes are generated.
+### 2. Create the launcher script
 
-## Use an existing audio file
 ```bash
-python3 meeting2notes.py --audio "/path/to/audio.m4a"
+nano ~/bin/meetingnotes
 ```
 
-## Output format
+Paste the following **and replace the path** with the location of this repo on your machine:
 
-### Default (Markdown)
 ```bash
-python3 meeting2notes.py --record --device ":0"
+#!/usr/bin/env bash
+set -e
+
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate audio2notes
+
+python /ABSOLUTE/PATH/TO/REPO/meeting2notes.py --record --device ":0" --format txt
 ```
 
-### Plain text
+Save and exit (`Ctrl + O`, Enter, `Ctrl + X`).
+
+---
+
+### 3. Make it executable
+
 ```bash
-python3 meeting2notes.py --record --device ":0" --format txt
+chmod +x ~/bin/meetingnotes
 ```
 
-## Output location
+---
+
+### 4. Add `~/bin` to your PATH
+
+```bash
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+---
+
+## Using the tool
+
+From **any directory**, run:
+
+```bash
+meetingnotes
+```
+
+- Recording starts immediately  
+- Press **Enter** to stop  
+- Progress messages appear while notes are generated  
+- Notes are saved automatically  
+
+---
+
+## Output
+
 Notes are saved to:
+
 ```
-~/Documents/Meeting_Notes/<Meeting Title> - Notes.md
 ~/Documents/Meeting_Notes/<Meeting Title> - Notes.txt
+```
+
+(To save Markdown instead, edit the launcher and change `--format txt` to `--format md`.)
+
+---
+
+## Troubleshooting
+
+If `meetingnotes` reports that the API key is missing, you can check:
+
+```bash
+echo $OPENAI_API_KEY
 ```
