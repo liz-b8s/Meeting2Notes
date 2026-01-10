@@ -1,284 +1,66 @@
-# Meeting2Notes
-
-Record meeting audio (or use an existing audio file), **transcribe locally for free** using **faster-whisper**, then 
-use OpenAI (GPT) to generate detailed meeting notes.
-
-Outputs as **Markdown or plain text**.
-
----
-
-## Requirements
-- macOS
-- Conda (Miniconda or Anaconda)
-- Python 3.9+ (recommended: 3.10)
-- OpenAI API key (for map/title/notes)
-- ffmpeg + ffprobe (recording + audio handling)
-- faster-whisper + ctranslate2 (local transcription)
-
----
-
-## Setup
-
-### 1) Install ffmpeg
-
-```bash
-brew install ffmpeg
-```
-
-Verify:
-
-```bash
-ffmpeg -version
-ffprobe -version
-```
-
----
-
-### 2) Create + activate the Conda environment
-
-```bash
-conda create -n audio2notes python=3.10 -y
-conda activate audio2notes
-```
-
-Install dependencies:
-
-```bash
-pip install -U requests faster-whisper ctranslate2
-```
-
-Optional (only if you want CUDA detection on machines with NVIDIA GPUs):
-
-```bash
-pip install -U torch
-```
-
----
-
-### 3) Set your OpenAI API key
-
-In your terminal:
-
-```bash
-export OPENAI_API_KEY="sk-..."
-```
-
-To make it permanent:
-
-```bash
-echo 'export OPENAI_API_KEY="sk-..."' >> ~/.zshrc
-source ~/.zshrc
-```
-
-
----
-
-### 4) Allow microphone access (macOS)
-
-System Settings → **Privacy & Security → Microphone**  
-Enable access for whichever app you use to run the script (Terminal / iTerm / VS Code etc.).
-
----
-
-## Using the tool
-
-### Transcribe an existing audio file
-
-```bash
-python meeting2notes.py --audio "/path/to/file.m4a" --format txt
-```
-
-Markdown output:
-
-```bash
-python meeting2notes.py --audio "/path/to/file.m4a" --format md
-```
-
-### Record a meeting (macOS)
-
-List input devices:
-
-```bash
-python meeting2notes.py --list-devices
-```
-
-Record (default device `:0`):
-
-```bash
-python meeting2notes.py --record --device ":0" --format txt
-```
-
-Press **Enter** to stop recording.
-
----
-
-## Debug timing mode
-
-Your script is quiet by default. To get timestamped step timings + detailed progress:
-
-```bash
-python meeting2notes.py --audio "/path/to/file.m4a" --format txt --debug_timing
-```
-
----
-
-## Long audio files
-
-- If audio duration is **> 10 minutes**, your script **automatically splits into chunks** (default: 10-minute chunks) and transcribes chunk-by-chunk.
-- You can change chunk size:
-
-```bash
-python meeting2notes.py --audio "/path/to/file.m4a" --chunk-seconds 900 --format txt
-```
-
-(Example above: 15-minute chunks)
-
----
-
-## faster-whisper performance
-
-### Model size
-
-Default is:
-
-- `--whisper-model small`
-
-You can choose:
-
-- `tiny` (fastest, lowest accuracy)
-- `base`
-- `small` (good speed/accuracy)
-- `medium` (better accuracy, slower)
-- `large-v3` (best accuracy, slowest)
-
-Example:
-
-```bash
-python meeting2notes.py --audio "/path/to/file.m4a" --whisper-model base --format txt
-```
-When you first use this, it will need to download the model weights (may take a while if you use a big model).
-### Device + compute type
-
-On macOS, **CPU + int8** is usually best for faster-whisper.
-
-Defaults:
-- device: auto (usually `cpu`)
-- compute: `int8`
-
-You can force:
-
-```bash
-python meeting2notes.py --audio "/path/to/file.m4a" --fw-device cpu --fw-compute-type int8 --format txt
-```
-
-If you’re on an NVIDIA GPU box:
-
-```bash
-python meeting2notes.py --audio "/path/to/file.m4a" --fw-device cuda --fw-compute-type float16 --format txt
-```
-
----
-
-## Output
-
-Files are saved to:
-
-```
-~/Documents/Meeting_Notes/<Meeting Title> - Notes.txt
-```
-
-or `.md` if `--format md`.
-
-The output includes:
-- structured notes
-- full transcript
-- a cost breakdown for the OpenAI calls
-
----
-
-## One-command launcher (recommended)
-
-This creates a global command called `meetingnotes`.
-
-### 1) Create a launcher directory
-
-```bash
-mkdir -p ~/bin
-```
-
-### 2) Create the launcher script
-
-```bash
-nano ~/bin/meetingnotes
-```
-
-Paste this and **replace** `/ABSOLUTE/PATH/TO/REPO`:
-
-```bash
-#!/usr/bin/env bash
-set -e
-
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate audio2notes
-
-python /ABSOLUTE/PATH/TO/REPO/meeting2notes.py --record --device ":0" --format txt
-```
-
-Optional: enable debug timing by default:
-
-```bash
-python /ABSOLUTE/PATH/TO/REPO/meeting2notes.py --record --device ":0" --format txt --debug_timing
-```
-
-Save and exit (`Ctrl + O`, Enter, `Ctrl + X`).
-
-### 3) Make it executable
-
-```bash
-chmod +x ~/bin/meetingnotes
-```
-
-### 4) Add `~/bin` to your PATH
-
-```bash
-echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-```
-
-Now run from anywhere:
-
-```bash
-meetingnotes
-```
-
----
-
-## Troubleshooting
-
-### “OPENAI_API_KEY environment variable is not set.”
-Check:
-
-```bash
-echo $OPENAI_API_KEY
-```
-
-If empty, re-export it or add it to `~/.zshrc`.
-
----
-
-### Hugging Face warning about unauthenticated requests
-This is normal without `HF_TOKEN`. It still works, but downloads may be slower / rate-limited. Set:
-
-```bash
-export HF_TOKEN="hf_..."
-```
-
----
-
-### ffmpeg not found
-Install:
-
-```bash
-brew install ffmpeg
-```
+Meeting2Notes
+
+Simple tool to transcribe local audio (via faster-whisper) and generate structured meeting notes using an LLM.
+
+What it does
+- Re-encodes or records audio, transcribes locally with faster-whisper.
+- Calls an LLM (OpenAI) to extract a meeting structure, generate a title, and produce Notion-style notes.
+- Saves notes (Markdown or plain text) with transcript and a small cost breakdown.
+
+Prerequisites
+- Python 3.10+ (use a virtual environment).
+- ffmpeg and ffprobe installed and on PATH (macOS: brew install ffmpeg).
+- Python packages: faster-whisper, ctranslate2 (optional/platform-dependent), requests.
+  Example:
+    python -m pip install faster-whisper ctranslate2 requests
+
+- An OpenAI API key set in your environment:
+    export OPENAI_API_KEY="sk-..."
+
+Quick start (project root)
+1. Make the helper script executable (one-time):
+   chmod +x run.sh
+
+2. Run the CLI:
+   ./run.sh --help
+
+3. Typical commands:
+   - Transcribe an audio file:
+     ./run.sh --audio /path/to/meeting.m4a
+
+   - Record (macOS avfoundation; press Enter to stop):
+     ./run.sh --record --device ":0"
+
+   - Output plain text instead of Markdown:
+     ./run.sh --audio /path/to/meeting.m4a --format txt
+
+Run from anywhere
+Option A — Quick (recommended)
+- Create ~/bin, make the script executable, and symlink:
+    chmod +x run.sh
+    mkdir -p ~/bin
+    ln -sf "$(pwd)/run.sh" ~/bin/meeting2notes
+
+- Ensure ~/bin is in your PATH (for zsh):
+    echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
+    source ~/.zshrc
+
+- Then run:
+    meeting2notes --help
+    meeting2notes --audio /path/to/meeting.m4a
+
+Option B — Python-installed CLI (optional)
+- If you want a normal console entrypoint, I can add packaging metadata (pyproject.toml) and a console script. Then you could run:
+    python -m pip install -e .
+  and use `meeting2notes` from your environment. Tell me if you want this and I'll add the packaging files.
+
+Notes and recommendations
+- Local transcription keeps audio on your machine, avoiding API costs for transcription.
+- The LLM calls (structure/title/notes) send transcripts to OpenAI — do not upload sensitive data unless you are comfortable.
+- Consider adding unit tests for utils and openai_client (mock requests), and mocks for audio/transcription during CI.
+
+Troubleshooting
+- Permission denied running ./run.sh: run chmod +x run.sh
+- Command not found after symlink: ensure ~/bin is in PATH and reload your shell
+- ffmpeg not found: install it and ensure it's on PATH
 

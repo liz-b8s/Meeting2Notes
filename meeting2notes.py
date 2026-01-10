@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-Meeting2Notes (Local transcription via faster-whisper)
+Legacy shim for meeting2notes CLI.
 
-Requires:
-- ffmpeg (and ffprobe) installed (brew install ffmpeg)
-- pip install faster-whisper ctranslate2 requests
+This file used to contain the entire application. It has been refactored
+into the `meeting2notes` package. The shim simply calls the new CLI entrypoint.
 """
 
 from __future__ import annotations
@@ -741,4 +740,6 @@ def main() -> None:
         print(f"Saved notes to: {out_path}")
 
 if __name__ == "__main__":
-    main()
+    # Preserve backwards compatibility for direct script execution.
+    from meeting2notes.cli import main as _main
+    _main()
