@@ -188,6 +188,9 @@ def main() -> None:
     else:
         print(f"Saved notes to: {out_path}")
 
+    # Send notification
+    utils.send_notification("Meeting2Notes", f"Notes ready: {meeting_title}")
+
 
 if __name__ == "__main__":
     main()
