@@ -1,13 +1,13 @@
-Meeting2Notes
+## Meeting2Notes
 
 Simple tool to transcribe local audio (via faster-whisper) and generate structured meeting notes using an LLM.
 
-What it does
+### What it does
 - Re-encodes or records audio, transcribes locally with faster-whisper.
 - Calls an LLM (OpenAI) to extract a meeting structure, generate a title, and produce Notion-style notes.
 - Saves notes (Markdown or plain text) with transcript and a small cost breakdown.
 
-Prerequisites
+### Prerequisites
 - Python 3.10+ (use a virtual environment).
 - ffmpeg and ffprobe installed and on PATH (macOS: brew install ffmpeg).
 - Python packages: faster-whisper, ctranslate2 (optional/platform-dependent), requests.
@@ -17,7 +17,7 @@ Prerequisites
 - An OpenAI API key set in your environment:
     export OPENAI_API_KEY="sk-..."
 
-Quick start (project root)
+### Quick start (project root)
 1. Make the helper script executable (one-time):
    chmod +x run.sh
 
@@ -34,8 +34,8 @@ Quick start (project root)
    - Output plain text instead of Markdown:
      ./run.sh --audio /path/to/meeting.m4a --format txt
 
-Run from anywhere
-Option A — Quick (recommended)
+### Run from anywhere
+
 - Create ~/bin, make the script executable, and symlink:
     chmod +x run.sh
     mkdir -p ~/bin
@@ -49,17 +49,12 @@ Option A — Quick (recommended)
     meeting2notes --help
     meeting2notes --audio /path/to/meeting.m4a
 
-Option B — Python-installed CLI (optional)
-- If you want a normal console entrypoint, I can add packaging metadata (pyproject.toml) and a console script. Then you could run:
-    python -m pip install -e .
-  and use `meeting2notes` from your environment. Tell me if you want this and I'll add the packaging files.
-
-Notes and recommendations
+### Notes and recommendations
 - Local transcription keeps audio on your machine, avoiding API costs for transcription.
 - The LLM calls (structure/title/notes) send transcripts to OpenAI — do not upload sensitive data unless you are comfortable.
 - Consider adding unit tests for utils and openai_client (mock requests), and mocks for audio/transcription during CI.
 
-Troubleshooting
+### Troubleshooting
 - Permission denied running ./run.sh: run chmod +x run.sh
 - Command not found after symlink: ensure ~/bin is in PATH and reload your shell
 - ffmpeg not found: install it and ensure it's on PATH
