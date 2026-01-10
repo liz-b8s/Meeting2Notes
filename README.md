@@ -139,16 +139,41 @@ launchctl load ~/Library/LaunchAgents/com.meeting2notes.menubar.plist
 - View recent recordings and transcribe with one click
 - Live progress indicators during transcription
 
-### Manage
+### Stopping the app
+
+From the menu bar:
+- Click **◉** → **Quit Meeting2Notes**
+
+Or from terminal:
+```bash
+pkill -f "menubar.py"
+```
+
+### Starting the app
+
+If you set up auto-start (Launch Agent), the app starts automatically on login. If you quit it manually, restart with:
 
 ```bash
-# Stop the app
+launchctl kickstart -k gui/$(id -u)/com.meeting2notes.menubar
+```
+
+If you didn't set up auto-start, run manually from the Meeting2Notes directory:
+
+```bash
+python menubar.py
+```
+
+### Managing auto-start
+
+```bash
+# Disable auto-start (stops app and prevents launch on login)
 launchctl unload ~/Library/LaunchAgents/com.meeting2notes.menubar.plist
 
-# Start the app
+# Re-enable auto-start
 launchctl load ~/Library/LaunchAgents/com.meeting2notes.menubar.plist
 
-# Remove auto-start
+# Remove auto-start completely
+launchctl unload ~/Library/LaunchAgents/com.meeting2notes.menubar.plist
 rm ~/Library/LaunchAgents/com.meeting2notes.menubar.plist
 ```
 
