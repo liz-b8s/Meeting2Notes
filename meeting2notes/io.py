@@ -32,7 +32,7 @@ def save_notes(
         "\n\n---\n\n"
         "## Generation cost\n"
         + "\n".join(f"- {l}" for l in cost_lines)
-        + f"\n- **Total:** £{sum(float(l.split()[-1].lstrip('£')) for l in cost_lines):.4f}\n"
+        + f"\n- **Total:** £{sum(float(l.split('£')[-1]) for l in cost_lines):.4f}\n"
     )
 
     final_md = (
