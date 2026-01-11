@@ -22,6 +22,50 @@ from enum import Enum
 
 import rumps
 
+# Ensure CFBundleIdentifier is present when running from a plain interpreter
+# (not an app bundle). Rumps notifications require this key in the main bundle's
+# Info.plist. We attempt two mitigations:
+# 1) Set CFBundleIdentifier at runtime via PyObjC (Foundation.NSBundle)
+# 2) Create a minimal Info.plist next to the interpreter if one is missing
+#    (e.g., ~/miniforge3/bin/Info.plist) so rumps can initialize notifications.
+try:
+    from Foundation import NSBundle
+    bundle = NSBundle.mainBundle()
+    if bundle is not None:
+        info = bundle.infoDictionary() or {}
+        # Only set if missing or empty
+        if not info.get("CFBundleIdentifier"):
+            info["CFBundleIdentifier"] = "com.lizb8s.meeting2notes"
+except Exception:
+    # If PyObjC/Foundation isn't available for some reason, continue without crashing.
+    pass
+
+# Fallback: ensure Info.plist exists alongside the interpreter if missing.
+# This addresses environments like Conda/miniforge where rumps expects
+# an Info.plist at <env>/bin/Info.plist and errors if absent.
+try:
+    exe_dir = Path(sys.executable).resolve().parent
+    plist_path = exe_dir / "Info.plist"
+    if not plist_path.exists():
+        minimal_plist = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.lizb8s.meeting2notes</string>
+    <key>CFBundleName</key>
+    <string>Meeting2Notes</string>
+</dict>
+</plist>
+"""
+        # Best-effort create; ignore errors to avoid crashing
+        try:
+            plist_path.write_text(minimal_plist, encoding="utf-8")
+        except Exception:
+            pass
+except Exception:
+    pass
+
 from meeting2notes.transcribe import transcribe_audio_local
 from meeting2notes.openai_client import (
     build_meeting_map,
@@ -29,6 +73,9 @@ from meeting2notes.openai_client import (
     generate_meeting_notes,
 )
 from meeting2notes.utils import iso_timestamp_local, safe_filename, markdown_to_text
+
+# Python interpreter to use for CLI subprocess (can be overridden via env)
+SUBPROC_PYBIN = os.environ.get("MEETING2NOTES_PY") or sys.executable
 
 # Configure logging.
 # Default: do not create a file logger so the app runs cleanly for users who
@@ -603,11 +650,11 @@ class Meeting2NotesApp(rumps.App):
             # Run the CLI in a separate process which will perform the full
             # transcription + analysis + notes generation and write the output.
             cmd = [
-                sys.executable, "-m", "meeting2notes.cli",
+                SUBPROC_PYBIN, "-m", "meeting2notes.cli",
                 "--audio", str(audio_path),
                 "--format", self._output_format,
             ]
-            logger.debug("Spawning CLI subprocess: %s", " ".join(map(str, cmd)))
+            logger.debug("Spawning CLI subprocess (%s): %s", SUBPROC_PYBIN, " ".join(map(str, cmd)))
             r = subprocess.run(cmd, capture_output=True, text=True)
             # Stop the UI cycler now that the subprocess has finished
             try:
@@ -624,6 +671,23 @@ class Meeting2NotesApp(rumps.App):
                 logger.exception("Failed to clear processing state for %s", audio_path)
 
             if r.returncode != 0:
+                # Friendly handling if the Python used for the subprocess is missing dependencies
+                missing_fw = "No module named 'faster_whisper'" in (r.stderr or "") or "No module named 'faster_whisper'" in (r.stdout or "")
+                if missing_fw:
+                    msg = (
+                        f"Interpreter missing faster-whisper: {SUBPROC_PYBIN}\n"
+                        f"Install dependencies:\n"
+                        f'  "{SUBPROC_PYBIN}" -m pip install faster-whisper ctranslate2 requests\n'
+                        f"Or set MEETING2NOTES_PY to a venv with the packages installed."
+                    )
+                    logger.error(msg)
+                    rumps.Timer(lambda _: rumps.notification(
+                        title="Dependency missing",
+                        subtitle="faster-whisper not installed",
+                        message=msg,
+                        sound=False
+                    ), 0).start()
+                    return
                 logger.error("CLI subprocess failed: returncode=%s stdout=%s stderr=%s",
                              r.returncode, r.stdout, r.stderr)
                 raise RuntimeError(f"Transcription process failed: {r.stderr.strip()[:200]}")

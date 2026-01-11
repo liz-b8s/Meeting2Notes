@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# meeting2notes: run Meeting2Notes from anywhere
+# - "meeting2notes menubar" launches the menu bar app
+# - "meeting2notes doctor" prints environment diagnostics and checks dependencies
+# - otherwise, args are passed to the CLI (e.g., --record, --audio /path.m4a)
+#
+# Usage examples:
+#   meeting2notes menubar
+#   meeting2notes --record --device ":0"
+#   meeting2notes --audio "/path/to/meeting.m4a" --format txt
+#
+# Install (one-time):
+#   chmod +x bin/meeting2notes
+#   mkdir -p ~/bin
+#   ln -sf "$(pwd)/bin/meeting2notes" ~/bin/meeting2notes
+#   echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+#
+# If you use a specific Python/venv, set MEETING2NOTES_PY to that interpreter path.
+# If your repo is elsewhere, set MEETING2NOTES_REPO to the repo path.
+set -euo pipefail
+
+# Resolve script directory even when symlinked
+SOURCE="${BASH_SOURCE[0]:-$0}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
+# Repo directory where meeting2notes/ and menubar.py live
+REPO_DIR="${MEETING2NOTES_REPO:-$SCRIPT_DIR/..}"
+
+# Choose Python interpreter for running menubar/CLI
+# If MEETING2NOTES_PY is set, use it. Otherwise try common locations.
+if [ -z "${MEETING2NOTES_PY:-}" ]; then
+  if [ -x "$HOME/miniforge3/envs/audio2notes/bin/python" ]; then
+    export MEETING2NOTES_PY="$HOME/miniforge3/envs/audio2notes/bin/python"
+  elif [ -n "${CONDA_PREFIX:-}" ] && [ -x "$CONDA_PREFIX/bin/python" ]; then
+    export MEETING2NOTES_PY="$CONDA_PREFIX/bin/python"
+  elif [ -x "$REPO_DIR/.venv/bin/python" ]; then
+    export MEETING2NOTES_PY="$REPO_DIR/.venv/bin/python"
+  fi
+fi
+# Final fallback if nothing detected: python3 on PATH
+PYBIN="${MEETING2NOTES_PY:-python3}"
+
+# Ensure Python can import the package from the repo dir when run from anywhere
+export PYTHONPATH="${REPO_DIR}${PYTHONPATH:+:$PYTHONPATH}"
+
+# Doctor: print interpreter, check deps, and show guidance
+if [ "${1:-}" = "doctor" ]; then
+  shift
+  "$PYBIN" - "$@" <<'PY'
+import os, sys, shutil
+py = sys.executable
+print(f"Interpreter: {py}")
+print(f"PYTHONPATH: {os.environ.get('PYTHONPATH','')}")
+print(f"OPENAI_API_KEY set: {'yes' if os.environ.get('OPENAI_API_KEY') else 'no'}")
+print(f"ffmpeg on PATH: {shutil.which('ffmpeg') is not None}")
+missing = []
+for mod in ('faster_whisper','ctranslate2','requests','rumps'):
+    try:
+        __import__(mod)
+    except Exception as e:
+        print(f"Missing module: {mod} ({e})")
+        missing.append(mod)
+if missing:
+    print("\nInstall missing packages into this interpreter:")
+    print(f'  "{py}" -m pip install ' + " ".join(missing))
+    print('\nAlternatively, set MEETING2NOTES_PY to a venv with the packages installed, e.g.:')
+    print('  echo \'export MEETING2NOTES_PY="/full/path/to/venv/bin/python"\' >> ~/.zshrc && source ~/.zshrc')
+    sys.exit(2)
+else:
+    print("All required Python packages are present.")
+PY
+  exit $?
+fi
+
+# Subcommand: menubar -> run the menu bar app (with preflight check)
+if [ "${1:-}" = "menubar" ] || [ "${1:-}" = "--menubar" ]; then
+  shift
+  # Preflight dependency check (fast) so new users get clear instructions upfront
+  if "$PYBIN" - <<'PY' >/dev/null 2>&1; then
+import sys
+for mod in ('faster_whisper','ctranslate2','requests','rumps'):
+    __import__(mod)
+PY
+    exec "$PYBIN" "$REPO_DIR/menubar.py" "$@"
+  else
+    # If check fails, run doctor to print guidance and exit non-zero
+    exec "$0" doctor
+  fi
+fi
+
+# Otherwise: pass-through to CLI module
+exec "$PYBIN" -m meeting2notes.cli "$@"

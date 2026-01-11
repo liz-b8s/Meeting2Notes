@@ -26,7 +26,12 @@ def main() -> None:
     timing.DEBUG_TIMING = False
     timing.START_TS = time.perf_counter()
 
-    p = argparse.ArgumentParser(prog="meeting2notes", description="Transcribe audio and generate meeting notes.")
+    p = argparse.ArgumentParser(
+        prog="meeting2notes",
+        description="Transcribe audio and generate meeting notes.",
+        epilog="Menubar: run 'meeting2notes menubar' to launch the macOS menu bar app.",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
     g = p.add_mutually_exclusive_group()
     g.add_argument("--audio", type=str, help="Path to audio file to transcribe")
     g.add_argument("--record", action="store_true", help="Record audio from macOS device")
