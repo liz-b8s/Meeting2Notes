@@ -8,9 +8,13 @@ AI-powered notes. Designed for minimal friction and maximum utility.
 
 from __future__ import annotations
 
+import atexit
 import datetime as dt
+import fcntl
 import os
+import signal
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
@@ -18,6 +22,60 @@ from dataclasses import dataclass
 from enum import Enum
 
 import rumps
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Singleton Lock
+# ─────────────────────────────────────────────────────────────────────────────
+
+LOCK_FILE = Path.home() / ".meeting2notes.lock"
+_lock_fd = None
+
+
+def _is_pid_running(pid: int) -> bool:
+    """Check if a process with given PID is running."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, ProcessLookupError):
+        return False
+
+
+def acquire_singleton_lock() -> bool:
+    """Ensure only one instance runs. Returns True if lock acquired."""
+    global _lock_fd
+
+    # Check for stale lock file
+    if LOCK_FILE.exists():
+        try:
+            old_pid = int(LOCK_FILE.read_text().strip())
+            if not _is_pid_running(old_pid):
+                # Stale lock, remove it
+                LOCK_FILE.unlink(missing_ok=True)
+        except (ValueError, OSError):
+            # Invalid lock file, remove it
+            LOCK_FILE.unlink(missing_ok=True)
+
+    try:
+        _lock_fd = open(LOCK_FILE, 'w')
+        fcntl.flock(_lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _lock_fd.write(str(os.getpid()))
+        _lock_fd.flush()
+        return True
+    except (IOError, OSError):
+        return False
+
+
+def release_singleton_lock():
+    """Release the singleton lock."""
+    global _lock_fd
+    if _lock_fd:
+        try:
+            fcntl.flock(_lock_fd.fileno(), fcntl.LOCK_UN)
+            _lock_fd.close()
+            LOCK_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 from meeting2notes.transcribe import transcribe_audio_local
 from meeting2notes.openai_client import (
@@ -35,9 +93,9 @@ from meeting2notes.utils import iso_timestamp_local, safe_filename, markdown_to_
 OUTPUT_DIR = Path.home() / "Documents" / "Meeting_Notes"
 MAX_RECENT_RECORDINGS = 5
 
-# Clean monospace-friendly symbols for menu bar
-ICON_IDLE = "◉"
-ICON_RECORDING = "●"
+# Menu bar icons - using text for visibility
+ICON_IDLE = "M2N"
+ICON_RECORDING = "⏺ REC"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -83,32 +141,43 @@ def get_audio_devices() -> List[Tuple[str, str]]:
     in_audio_section = False
 
     for line in (result.stderr + result.stdout).splitlines():
+        # Audio devices come AFTER video devices in ffmpeg output
         if "AVFoundation audio devices" in line:
             in_audio_section = True
             continue
-        if "AVFoundation video devices" in line:
-            break
-        if in_audio_section and "[" in line and "]" in line:
-            try:
-                idx = line.split("]")[0].split("[")[-1].strip()
-                name = line.split("]", 1)[1].strip()
-                if idx.isdigit():
-                    devices.append((idx, name))
-            except (IndexError, ValueError):
-                continue
+        if in_audio_section:
+            # Stop if we hit an error line
+            if "Error opening" in line:
+                break
+            # Parse device lines like: [AVFoundation indev @ 0x...] [0] Device Name
+            if "] [" in line:
+                try:
+                    # Extract the device index and name from second bracket pair
+                    after_first = line.split("] ", 1)[1]  # "[0] Device Name"
+                    idx = after_first.split("]")[0].strip("[ ")
+                    name = after_first.split("]", 1)[1].strip()
+                    if idx.isdigit():
+                        devices.append((idx, name))
+                except (IndexError, ValueError):
+                    continue
 
     return devices if devices else [("0", "Default")]
 
 
 def record_audio(device_idx: str, output_path: Path) -> subprocess.Popen:
-    """Start ffmpeg recording process."""
+    """Start ffmpeg recording process.
+
+    Records to WAV format (PCM 16-bit) at 16kHz for reliable quality
+    and optimal Whisper transcription performance.
+    """
     return subprocess.Popen(
         [
             "ffmpeg", "-nostdin", "-y",
             "-f", "avfoundation",
             "-i", f":{device_idx}",
-            "-ac", "1",
-            "-ar", "16000",
+            "-ac", "1",           # Mono
+            "-ar", "16000",       # 16kHz optimal for speech/Whisper
+            "-c:a", "pcm_s16le",  # 16-bit PCM (lossless)
             str(output_path)
         ],
         stdin=subprocess.DEVNULL,
@@ -222,8 +291,10 @@ class Meeting2NotesApp(rumps.App):
             del self._recordings_section[key]
 
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        # Include both .wav (new) and .m4a (legacy) recordings
+        all_recordings = list(OUTPUT_DIR.glob("*.wav")) + list(OUTPUT_DIR.glob("*.m4a"))
         recordings = sorted(
-            OUTPUT_DIR.glob("*.m4a"),
+            all_recordings,
             key=lambda p: p.stat().st_mtime,
             reverse=True
         )[:MAX_RECENT_RECORDINGS]
@@ -284,7 +355,7 @@ class Meeting2NotesApp(rumps.App):
         try:
             OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             timestamp = dt.datetime.now().strftime("%Y-%m-%d %H.%M.%S")
-            self._output_path = OUTPUT_DIR / f"Recording {timestamp}.m4a"
+            self._output_path = OUTPUT_DIR / f"Recording {timestamp}.wav"
 
             self._process = record_audio(self._selected_device[0], self._output_path)
             self._start_time = dt.datetime.now()
@@ -357,6 +428,7 @@ class Meeting2NotesApp(rumps.App):
             return
 
         self._processing[audio_path] = Stage.TRANSCRIBING
+        self.title = Stage.TRANSCRIBING.bar_text  # Update icon immediately
         self._refresh_recordings()
 
         thread = threading.Thread(
@@ -369,8 +441,13 @@ class Meeting2NotesApp(rumps.App):
     def _set_stage(self, audio_path: Path, stage: Stage):
         """Update the processing stage for a file."""
         self._processing[audio_path] = stage
-        # Schedule UI refresh on main thread
-        rumps.Timer(lambda _: self._refresh_recordings(), 0.05).start()
+        # Schedule UI refresh on main thread (both icon and menu)
+        def refresh(_):
+            if self._processing:
+                s = list(self._processing.values())[-1]
+                self.title = s.bar_text
+            self._refresh_recordings()
+        rumps.Timer(refresh, 0.05).start()
 
     def _transcribe_worker(self, audio_path: Path):
         """Background transcription pipeline."""
@@ -429,8 +506,15 @@ class Meeting2NotesApp(rumps.App):
             )
         finally:
             self._processing.pop(audio_path, None)
-            # Refresh on main thread
-            rumps.Timer(lambda _: self._refresh_recordings(), 0.1).start()
+            # Refresh UI on main thread (both icon and menu)
+            def cleanup(_):
+                if self._processing:
+                    s = list(self._processing.values())[-1]
+                    self.title = s.bar_text
+                else:
+                    self.title = ICON_IDLE
+                self._refresh_recordings()
+            rumps.Timer(cleanup, 0.1).start()
 
     # ─────────────────────────────────────────────────────────────────────────
     # Utilities
@@ -453,6 +537,15 @@ class Meeting2NotesApp(rumps.App):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
+    # Ensure only one instance runs
+    if not acquire_singleton_lock():
+        print("Meeting2Notes is already running.", file=sys.stderr)
+        sys.exit(1)
+
+    # Clean up lock on exit
+    atexit.register(release_singleton_lock)
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+
     Meeting2NotesApp().run()
 
 
