@@ -76,129 +76,59 @@ For a more convenient experience, use the menu bar app instead of the CLI.
 
 ### Install
 
-```bash
-# Install the menu bar dependency
-pip install rumps
-
-# Run it
-python menubar.py
-```
-
-### Auto-start on login
-
-To have the app always running in your menu bar:
-
-1. Create a Launch Agent:
+From the project directory:
 
 ```bash
-cat > ~/Library/LaunchAgents/com.meeting2notes.menubar.plist << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.meeting2notes.menubar</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/python3</string>
-        <string>/path/to/Meeting2Notes/menubar.py</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-        <key>OPENAI_API_KEY</key>
-        <string>sk-your-api-key-here</string>
-    </dict>
-</dict>
-</plist>
-EOF
+pip install -e .
 ```
 
-2. Edit the plist to set:
-   - The correct path to `python3` (run `which python3`)
-   - The correct path to `menubar.py`
-   - Your `OPENAI_API_KEY`
+This installs two commands:
+- `m2n` - starts the menu bar app
+- `meeting2notes` - CLI for processing audio files
 
-3. Load it:
+### Starting the app
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.meeting2notes.menubar.plist
+m2n &
 ```
+
+The `&` runs it in the background so you can close the terminal. Look for **M2N** in your menu bar.
+
+Only one instance can run at a time. If you try to start a second instance, you'll see: "Meeting2Notes is already running."
 
 ### Features
 
-- **◉** icon in menu bar (changes to **●** with timer when recording)
+- **M2N** in menu bar (changes to **⏺ REC** with timer when recording)
 - Start/stop recording with **⌘R**
-- Select audio input device
+- Select audio input device (MacBook mic, Bluetooth headphones, USB mics, etc.)
 - Choose output format (Plain Text or Markdown)
 - View recent recordings and transcribe with one click
 - Live progress indicators during transcription
+- Records in WAV format (lossless) at 16kHz for optimal transcription quality
 
 ### Stopping the app
 
 From the menu bar:
-- Click **◉** → **Quit Meeting2Notes**
+- Click **M2N** → **Quit Meeting2Notes**
 
 Or from terminal:
 ```bash
 pkill -f "menubar.py"
 ```
 
-### Starting the app
-
-If you set up auto-start (Launch Agent), the app starts automatically on login. If you quit it manually, restart with:
-
-```bash
-launchctl kickstart -k gui/$(id -u)/com.meeting2notes.menubar
-```
-
-If you didn't set up auto-start, run manually from the Meeting2Notes directory:
-
-```bash
-python menubar.py
-```
-
-### Managing auto-start
-
-```bash
-# Disable auto-start (stops app and prevents launch on login)
-launchctl unload ~/Library/LaunchAgents/com.meeting2notes.menubar.plist
-
-# Re-enable auto-start
-launchctl load ~/Library/LaunchAgents/com.meeting2notes.menubar.plist
-
-# Remove auto-start completely
-launchctl unload ~/Library/LaunchAgents/com.meeting2notes.menubar.plist
-rm ~/Library/LaunchAgents/com.meeting2notes.menubar.plist
-```
+The app stays quit until you manually start it again.
 
 ---
 
 ## Run from anywhere
 
-1. Create `~/bin`, make the script executable, and symlink it:
+After running `pip install -e .` (see Menu Bar App section), you can use these commands from anywhere:
 
 ```bash
-chmod +x run.sh
-mkdir -p ~/bin
-ln -sf "$(pwd)/run.sh" ~/bin/meeting2notes
-```
+# Start the menu bar app
+m2n &
 
-2. Ensure `~/bin` is on your `PATH` (for `zsh`):
-
-```bash
-echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-```
-
-3. Run from anywhere:
-
-```bash
+# Process an audio file via CLI
 meeting2notes --help
 meeting2notes --audio /path/to/meeting.m4a
 ```

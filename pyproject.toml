@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meeting2notes"
+version = "0.1.0"
+description = "Transcribe audio and generate AI-powered meeting notes"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "faster-whisper",
+    "openai",
+    "rumps",
+]
+
+[project.scripts]
+meeting2notes = "meeting2notes.cli:main"
+m2n = "menubar:main"
+
+[tool.setuptools]
+py-modules = ["menubar"]
+
+[tool.setuptools.packages.find]
+include = ["meeting2notes*"]

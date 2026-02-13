@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+import subprocess
+import sys
 
 
 def iso_timestamp_local() -> str:
@@ -24,3 +26,23 @@ def markdown_to_text(md: str) -> str:
     text = re.sub(r"- \[ \]\s*", "- ", text)
     text = re.sub(r"^-{3,}$", "", text, flags=re.MULTILINE)
     return text.strip()
+
+
+def send_notification(title: str, message: str = "", sound: bool = True) -> None:
+    """Send a macOS notification. Fails silently on other platforms."""
+    if sys.platform != "darwin":
+        return
+
+    script = f'display notification "{message}" with title "{title}"'
+    if sound:
+        script += ' sound name "Glass"'
+
+    try:
+        subprocess.run(
+            ["osascript", "-e", script],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        pass  # osascript not available
