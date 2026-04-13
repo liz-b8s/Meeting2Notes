@@ -57,8 +57,11 @@ def list_macos_audio_devices() -> None:
 
 def record_audio_macos(output_path: Path, device: str) -> None:
     require_ffmpeg()
-    status(f"Recording to: {output_path}")
-    status("Press Enter to stop recording…")
+    # avfoundation audio-only format is ":N" — auto-fix bare numbers like "0" → ":0"
+    if device.isdigit():
+        device = f":{device}"
+    print(f"Recording to: {output_path}", flush=True)
+    print("Recording… press Enter to stop.", flush=True)
 
     cmd = [
         "ffmpeg",

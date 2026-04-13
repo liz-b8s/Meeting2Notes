@@ -90,6 +90,14 @@ logger.setLevel(logging.INFO)
 # module-level file handler reference (None when logging is disabled)
 _file_handler: logging.Handler | None = None
 
+# Allow enabling debug logging at startup via env (no menu interaction required)
+if os.environ.get("MEETING2NOTES_DEBUG_LOG") or os.environ.get("MEETING2NOTES_DEBUG"):
+    try:
+        enable_debug_logging(True)
+    except Exception:
+        pass
+logger.info("Menubar startup: sys.executable=%s SUBPROC_PYBIN=%s", sys.executable, (os.environ.get("MEETING2NOTES_PY") or sys.executable))
+
 
 def enable_debug_logging(enable: bool = True) -> None:
     """
